@@ -1,259 +1,35 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Linarc Geolocalize — geolocalização de IP, mapa e teste de VPN pela Linarc Team." />
-  <meta name="theme-color" content="#f5f5f5" />
-  <!-- Base path: site vive em /geolocalize/ (ex.: societad.shop/geolocalize) -->
-  <script>
-    (function () {
-      var path = location.pathname || "/";
-      var inSub = path === "/geolocalize" || path.indexOf("/geolocalize/") === 0;
-      var base = document.createElement("base");
-      base.href = inSub ? "/geolocalize/" : "/";
-      document.head.insertBefore(base, document.head.firstChild);
-    })();
-  </script>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0a0a'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='system-ui' font-weight='800' font-size='16' fill='%23fff'%3EL%3C/text%3E%3C/svg%3E" />
-  <title>Linarc Geolocalize</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="./css/styles.css" />
+  <meta charset="UTF-8">
+  <title>A QUALQUER MOMENTO</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      background-color: black;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-family: Arial, sans-serif;
+    }
+
+    h1 {
+      color: white;
+      font-size: 48px;
+      margin: 0;
+    }
+
+    #countdown {
+      color: white;
+      font-size: 24px;
+      margin-top: 20px;
+    }
+  </style>
 </head>
 <body>
-  <div class="grain" aria-hidden="true"></div>
-
-  <header class="site-header" id="siteHeader">
-    <a class="brand" href="#top" aria-label="Linarc Geolocalize">
-      <span class="brand-mark">L</span>
-      <span class="brand-text">LINARC</span>
-    </a>
-    <nav class="nav-center" aria-label="Principal">
-      <a href="#top" data-nav="lookup">Lookup</a>
-      <a href="#results" data-nav="results">Resultados</a>
-      <a href="#vpn" data-nav="vpn">VPN Test</a>
-      <a href="#history" data-nav="history">Histórico</a>
-    </nav>
-    <div class="nav-utils">
-      <button type="button" class="icon-btn" id="btnThemeHint" title="Tema P&B" aria-label="Tema">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/></svg>
-      </button>
-      <a class="icon-btn" href="https://linarcteam.site/" target="_blank" rel="noopener" title="Linarc Team" aria-label="Linarc Team">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      </a>
-    </div>
-    <button type="button" class="menu-toggle" id="menuToggle" aria-label="Menu" aria-expanded="false">
-      <span></span><span></span>
-    </button>
-  </header>
-
-  <div class="mobile-nav" id="mobileNav" hidden>
-    <a href="#top">Lookup</a>
-    <a href="#results">Resultados</a>
-    <a href="#vpn">VPN Test</a>
-    <a href="#history">Histórico</a>
-  </div>
-
-  <main id="top">
-    <!-- HERO — claro estilo Tesla -->
-    <section class="hero" id="hero">
-      <div class="hero-bg" aria-hidden="true">
-        <div class="hero-grid"></div>
-        <div class="hero-orb hero-orb-1"></div>
-      </div>
-
-      <div class="hero-content">
-        <p class="hero-eyebrow reveal">Linarc Team</p>
-        <h1 class="hero-title reveal delay-1">
-          <span class="title-line">Linarc</span>
-          <span class="title-line accent">Geolocalize</span>
-        </h1>
-        <p class="hero-sub reveal delay-2">Geolocalização de IP com precisão pública máxima — mapa, rede e segurança num olhar.</p>
-
-        <form class="lookup-form reveal delay-3" id="lookupForm" autocomplete="off">
-          <label class="sr-only" for="ipInput">Endereço IP</label>
-          <div class="lookup-field">
-            <span class="field-icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            </span>
-            <input type="text" id="ipInput" name="ip" placeholder="Digite um IPv4 ou IPv6…" spellcheck="false" inputmode="text" />
-            <button type="submit" class="btn btn-primary" id="btnLookup">
-              <span>Localizar</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-            </button>
-          </div>
-          <div class="lookup-actions">
-            <button type="button" class="btn btn-ghost" id="btnMyIp">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-              What’s my IP
-            </button>
-            <button type="button" class="btn btn-ghost" id="btnGoVpn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              Testar VPN
-            </button>
-          </div>
-        </form>
-
-        <p class="hero-hint reveal delay-4" id="statusLine">Pronto para consultar qualquer IP público.</p>
-      </div>
-    </section>
-
-    <!-- RESULTADOS — painel escuro -->
-    <section class="results section-dark is-idle" id="results" aria-live="polite">
-      <div class="section-inner">
-        <div class="results-head">
-          <div>
-            <p class="section-label">Relatório</p>
-            <h2 class="section-title">O que sabemos deste IP</h2>
-          </div>
-          <div class="results-head-actions">
-            <span class="badge" id="exposureBadge" hidden>Exposed</span>
-            <button type="button" class="btn btn-outline-light" id="btnCopyReport" disabled>Copiar relatório</button>
-          </div>
-        </div>
-
-        <div class="idle-panel" id="idlePanel">
-          <p class="idle-title">Nenhuma consulta ainda</p>
-          <p class="idle-copy">Use o campo acima ou <strong>What’s my IP</strong> para carregar o relatório, o mapa e os metadados de rede.</p>
-        </div>
-
-        <div class="results-body" id="resultsBody" hidden>
-          <div class="ip-showcase" id="ipShowcase">
-            <div class="ip-block" id="ipBlock"></div>
-          </div>
-
-          <div class="data-grid" id="dataGrid"></div>
-
-          <div class="map-panel" id="mapPanel">
-            <div class="map-toolbar">
-              <h3>Mapa geográfico</h3>
-              <div class="map-meta" id="mapMeta">—</div>
-            </div>
-            <div id="map" class="map" role="img" aria-label="Mapa da localização do IP"></div>
-            <p class="map-note">Posição aproximada com base em dados públicos de geolocalização de IP — não é GPS.</p>
-          </div>
-
-          <div class="extra-panels" id="extraPanels" hidden>
-            <article class="panel">
-              <h3>Conexão</h3>
-              <dl class="kv" id="connectionKv"></dl>
-            </article>
-            <article class="panel">
-              <h3>Fuso &amp; moeda</h3>
-              <dl class="kv" id="timezoneKv"></dl>
-            </article>
-            <article class="panel">
-              <h3>Segurança</h3>
-              <dl class="kv" id="securityKv"></dl>
-            </article>
-            <article class="panel">
-              <h3>Geografia</h3>
-              <dl class="kv" id="geoKv"></dl>
-            </article>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- VPN TEST -->
-    <section class="vpn section-dark" id="vpn">
-      <div class="section-inner">
-        <div class="vpn-head">
-          <p class="section-label">Segurança</p>
-          <h2 class="section-title">Teste de VPN</h2>
-          <p class="section-desc">Verifica se o IP público parece mascarado — flags de proxy/VPN, vazamento WebRTC e divergência de fuso.</p>
-        </div>
-
-        <div class="vpn-actions">
-          <button type="button" class="btn btn-primary btn-lg" id="btnRunVpn">
-            <span>Rodar análise</span>
-          </button>
-          <p class="vpn-status" id="vpnStatus">Nenhum teste executado ainda.</p>
-        </div>
-
-        <div class="vpn-score" id="vpnScore" hidden>
-          <div class="score-ring" id="scoreRing">
-            <svg viewBox="0 0 120 120">
-              <circle class="ring-bg" cx="60" cy="60" r="52" />
-              <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52" />
-            </svg>
-            <div class="score-text">
-              <strong id="scoreValue">—</strong>
-              <span id="scoreLabel">Score</span>
-            </div>
-          </div>
-          <div class="score-summary" id="scoreSummary"></div>
-        </div>
-
-        <div class="vpn-checks" id="vpnChecks">
-          <div class="check-card" data-check="public">
-            <div class="check-top"><span class="check-name">IP público</span><span class="check-state">—</span></div>
-            <p class="check-detail">Aguardando…</p>
-          </div>
-          <div class="check-card" data-check="flags">
-            <div class="check-top"><span class="check-name">Flags VPN / Proxy / Tor</span><span class="check-state">—</span></div>
-            <p class="check-detail">Aguardando…</p>
-          </div>
-          <div class="check-card" data-check="hosting">
-            <div class="check-top"><span class="check-name">Datacenter / Hosting</span><span class="check-state">—</span></div>
-            <p class="check-detail">Aguardando…</p>
-          </div>
-          <div class="check-card" data-check="webrtc">
-            <div class="check-top"><span class="check-name">Vazamento WebRTC</span><span class="check-state">—</span></div>
-            <p class="check-detail">Aguardando…</p>
-          </div>
-          <div class="check-card" data-check="timezone">
-            <div class="check-top"><span class="check-name">Fuso do browser × IP</span><span class="check-state">—</span></div>
-            <p class="check-detail">Aguardando…</p>
-          </div>
-          <div class="check-card" data-check="dns">
-            <div class="check-top"><span class="check-name">Consistência de resolução</span><span class="check-state">—</span></div>
-            <p class="check-detail">Aguardando…</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- HISTÓRICO -->
-    <section class="history section-light" id="history">
-      <div class="section-inner">
-        <div class="history-head">
-          <div>
-            <p class="section-label dark">Sessão</p>
-            <h2 class="section-title dark">Histórico local</h2>
-          </div>
-          <button type="button" class="btn btn-ghost-dark" id="btnClearHistory">Limpar</button>
-        </div>
-        <ul class="history-list" id="historyList">
-          <li class="history-empty">Nenhuma consulta nesta sessão.</li>
-        </ul>
-      </div>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-brand">
-        <span class="brand-mark small">L</span>
-        <div>
-          <strong>Linarc Geolocalize</strong>
-          <p>Dados públicos de geolocalização · Linarc Team</p>
-        </div>
-      </div>
-      <p class="footer-note">Feito com precisão. Informações derivadas de APIs públicas — use com responsabilidade.</p>
-    </div>
-  </footer>
-
-  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <div class="loader-overlay" id="loader" hidden aria-hidden="true">
-    <div class="loader-ring"></div>
-    <p id="loaderText">Consultando…</p>
-  </div>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script type="module" src="./js/app.js"></script>
-</body>
+  <h1>A QUALQUER MOMENTO</h1>
+  <div id="countdown"></div>
+  
 </html>
