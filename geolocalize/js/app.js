@@ -1,6 +1,5 @@
 import {
   isValidIp,
-  getMyIps,
   lookupIp,
   buildReportText,
 } from "./api.js";
@@ -9,6 +8,10 @@ import { runVpnTest } from "./vpn.js";
 
 const HISTORY_KEY = "linarc-geolocalize-history";
 const MAX_HISTORY = 12;
+const QUERY_LIMIT = 8;
+const QUERY_WINDOW_MS = 60_000;
+const QUERY_COOLDOWN_MS = 1_500;
+const QUERY_TIMES_KEY = "linarc-geolocalize-query-times";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -20,12 +23,13 @@ const els = {
   form: $("#lookupForm"),
   ipInput: $("#ipInput"),
   btnLookup: $("#btnLookup"),
-  btnMyIp: $("#btnMyIp"),
   btnGoVpn: $("#btnGoVpn"),
   statusLine: $("#statusLine"),
   ipBlock: $("#ipBlock"),
   dataGrid: $("#dataGrid"),
   mapMeta: $("#mapMeta"),
+  mapNote: $("#mapNote"),
+  btnGps: $("#btnGps"),
   exposureBadge: $("#exposureBadge"),
   btnCopyReport: $("#btnCopyReport"),
   extraPanels: $("#extraPanels"),
@@ -54,6 +58,34 @@ let lastInfo = null;
 let lastDualIps = {};
 let toastTimer = null;
 
+function consumeQueryQuota() {
+  const now = Date.now();
+  let timestamps = [];
+  try {
+    timestamps = JSON.parse(sessionStorage.getItem(QUERY_TIMES_KEY) || "[]");
+  } catch {
+    timestamps = [];
+  }
+  if (!Array.isArray(timestamps)) timestamps = [];
+  timestamps = timestamps.filter((at) => Number.isFinite(at) && now - at < QUERY_WINDOW_MS);
+
+  const lastQuery = timestamps.at(-1);
+  if (lastQuery && now - lastQuery < QUERY_COOLDOWN_MS) {
+    throw new Error("Aguarde um instante antes de fazer outra consulta.");
+  }
+  if (timestamps.length >= QUERY_LIMIT) {
+    const waitSeconds = Math.ceil((QUERY_WINDOW_MS - (now - timestamps[0])) / 1000);
+    throw new Error(`Limite local atingido. Tente novamente em ${waitSeconds}s.`);
+  }
+
+  timestamps.push(now);
+  try {
+    sessionStorage.setItem(QUERY_TIMES_KEY, JSON.stringify(timestamps));
+  } catch {
+    /* A validação da consulta continua ativa se o navegador bloquear storage. */
+  }
+}
+
 /* —— UI helpers —— */
 function showToast(msg) {
   els.toast.hidden = false;
@@ -76,7 +108,6 @@ function setLoading(on, text = "Consultando…", dark = false) {
   if (els.loaderText) els.loaderText.textContent = text;
   els.loader.classList.toggle("on-dark", dark);
   if (els.btnLookup) els.btnLookup.disabled = on;
-  if (els.btnMyIp) els.btnMyIp.disabled = on;
 }
 
 function setStatus(text) {
@@ -102,6 +133,22 @@ function scrollToId(id) {
 
 /* —— Header / nav —— */
 function setupChrome() {
+  document.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const key = event.key.toLowerCase();
+    const devtoolsShortcut = event.key === "F12" ||
+      ((event.ctrlKey || event.metaKey) && event.shiftKey && ["i", "j", "c"].includes(key)) ||
+      (event.metaKey && event.altKey && ["i", "j", "c"].includes(key)) ||
+      ((event.ctrlKey || event.metaKey) && key === "u");
+    if (devtoolsShortcut) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+
   const onScroll = () => {
     els.header.classList.toggle("scrolled", window.scrollY > 24);
     const darkSections = $$(".section-dark");
@@ -135,9 +182,6 @@ function setupChrome() {
     }
   });
 
-  $("#btnThemeHint")?.addEventListener("click", () => {
-    showToast("Tema P&B híbrido — hero claro · resultados escuros");
-  });
 }
 
 /* —— History —— */
@@ -150,7 +194,11 @@ function loadHistory() {
 }
 
 function saveHistory(list) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, MAX_HISTORY)));
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, MAX_HISTORY)));
+  } catch {
+    showToast("Histórico indisponível neste navegador");
+  }
 }
 
 function pushHistory(info) {
@@ -232,10 +280,13 @@ function renderIpBlock(info, dual = {}) {
   }
   if (!rows.length) rows.push(ipRow(info.ip, info.type || "IP"));
 
-  const flag = info.flagImg
-    ? `<img class="flag" src="${escapeAttr(info.flagImg)}" alt="" width="22" height="16" />`
+  const safeFlag = /^[A-Za-z]{2}$/.test(info.countryCode || "")
+    ? `https://cdn.ipwhois.io/flags/${info.countryCode.toLowerCase()}.svg`
+    : "";
+  const flag = safeFlag
+    ? `<img class="flag" src="${safeFlag}" alt="" width="22" height="16" />`
     : info.flagEmoji
-      ? `<span>${info.flagEmoji}</span>`
+      ? `<span>${escapeHtml(info.flagEmoji)}</span>`
       : "";
 
   els.ipBlock.classList.remove("empty-state");
@@ -351,10 +402,10 @@ function renderExtra(info) {
     ["Continente", `${info.continent} (${info.continentCode})`],
     ["Capital", info.capital],
     ["DDI", info.callingCode],
-    ["União Europeia", info.isEu ? "sim" : "não"],
+    ["União Europeia", info.isEu == null ? "—" : info.isEu ? "sim" : "não"],
     ["Fronteiras", info.borders],
     [
-      "População",
+      "População do país (estimada)",
       info.countryPopulation != null
         ? Number(info.countryPopulation).toLocaleString("pt-BR")
         : "—",
@@ -387,6 +438,13 @@ function updateBadge(info) {
 
 /* —— Core lookup —— */
 async function performLookup(ip, dualIps = {}) {
+  try {
+    consumeQueryQuota();
+  } catch (err) {
+    setStatus(err.message);
+    showToast(err.message);
+    return;
+  }
   setLoading(true, "Consultando geolocalização…");
   setStatus(`Buscando ${ip || "seu IP"}…`);
   showResultsShell();
@@ -415,7 +473,7 @@ async function performLookup(ip, dualIps = {}) {
       updateMap(
         info.latitude,
         info.longitude,
-        `${info.city}, ${info.country}<br/><code>${info.ip}</code>`
+        `${escapeHtml(info.city)}, ${escapeHtml(info.country)}<br/><code>${escapeHtml(info.ip)}</code>`
       );
     } else {
       els.mapMeta.textContent = "Sem coordenadas para este IP";
@@ -423,7 +481,7 @@ async function performLookup(ip, dualIps = {}) {
 
     els.btnCopyReport.disabled = false;
     pushHistory(info);
-    setStatus(`Pronto — ${info.ip} · ${info.city}, ${info.country}`);
+    setStatus(`Pronto: ${info.ip} · ${info.city}, ${info.country}`);
     showToast("Geolocalização concluída");
     scrollToId("results");
     setTimeout(invalidateMap, 400);
@@ -449,6 +507,21 @@ function setCheck(id, state, label, detail) {
 }
 
 async function performVpnTest() {
+  const targetIp = els.ipInput.value.trim();
+  if (!isValidIp(targetIp)) {
+    const message = "Digite um IPv4 ou IPv6 no campo acima antes de analisar.";
+    els.vpnStatus.textContent = message;
+    els.ipInput.focus();
+    showToast(message);
+    return;
+  }
+  try {
+    consumeQueryQuota();
+  } catch (err) {
+    els.vpnStatus.textContent = err.message;
+    showToast(err.message);
+    return;
+  }
   els.btnRunVpn.disabled = true;
   els.vpnStatus.textContent = "Iniciando análise…";
   els.vpnScore.hidden = true;
@@ -461,7 +534,7 @@ async function performVpnTest() {
   });
 
   try {
-    const result = await runVpnTest((msg) => {
+    const result = await runVpnTest(targetIp, (msg) => {
       els.vpnStatus.textContent = msg;
     });
 
@@ -482,14 +555,11 @@ async function performVpnTest() {
       els.ringFg.style.strokeDashoffset = String(offset);
     });
 
-    els.vpnStatus.textContent = `Concluído · IP ${result.myIps.primary}`;
+    els.vpnStatus.textContent = `Concluído · IP analisado ${result.targetIp}`;
 
     showResultsShell();
     lastInfo = result.info;
-    lastDualIps = {
-      ipv4: result.myIps.ipv4,
-      ipv6: result.myIps.ipv6,
-    };
+    lastDualIps = {};
     renderIpBlock(result.info, lastDualIps);
     renderDataGrid(result.info);
     renderExtra(result.info);
@@ -497,7 +567,7 @@ async function performVpnTest() {
     els.btnCopyReport.disabled = false;
     if (result.info.latitude != null) {
       els.mapMeta.textContent = `${Number(result.info.latitude).toFixed(5)}, ${Number(result.info.longitude).toFixed(5)}`;
-      updateMap(result.info.latitude, result.info.longitude, result.info.ip);
+      updateMap(result.info.latitude, result.info.longitude, escapeHtml(result.info.ip));
     }
     pushHistory(result.info);
     showToast("Teste de VPN concluído");
@@ -516,7 +586,7 @@ function setupEvents() {
     e.preventDefault();
     const raw = els.ipInput.value.trim();
     if (!raw) {
-      showToast("Digite um IP ou use What’s my IP");
+      showToast("Digite um IPv4 ou IPv6 para consultar");
       return;
     }
     if (!isValidIp(raw)) {
@@ -526,28 +596,46 @@ function setupEvents() {
     performLookup(raw);
   });
 
-  els.btnMyIp.addEventListener("click", async () => {
-    setLoading(true, "Detectando seu IP…");
-    setStatus("Descobrindo seu IP público…");
-    try {
-      const ips = await getMyIps();
-      if (!ips.primary) throw new Error("Não foi possível detectar seu IP");
-      els.ipInput.value = ips.primary;
-      setLoading(false);
-      await performLookup(ips.primary, { ipv4: ips.ipv4, ipv6: ips.ipv6 });
-    } catch (err) {
-      setLoading(false);
-      setStatus(err.message);
-      showToast(err.message);
-    }
-  });
-
   els.btnGoVpn.addEventListener("click", () => {
     scrollToId("vpn");
-    setTimeout(() => performVpnTest(), 450);
   });
 
   els.btnRunVpn.addEventListener("click", () => performVpnTest());
+
+  els.btnGps.addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      showToast("Este navegador não oferece suporte a GPS.");
+      return;
+    }
+    els.btnGps.disabled = true;
+    els.btnGps.textContent = "Obtendo posição…";
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const lat = coords.latitude;
+        const lng = coords.longitude;
+        showResultsShell();
+        initMap();
+        els.mapMeta.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        els.mapNote.textContent = "Posição GPS deste dispositivo. O navegador só compartilha as coordenadas após sua permissão.";
+        updateMap(lat, lng, "GPS deste dispositivo");
+        showToast("Posição GPS exibida no mapa");
+        scrollToId("results");
+        els.btnGps.disabled = false;
+        els.btnGps.textContent = "Usar meu GPS";
+      },
+      (error) => {
+        const message = error.code === 1
+          ? "Permita o acesso à localização para usar o GPS."
+          : error.code === 2
+            ? "Não foi possível determinar sua posição."
+            : "A solicitação de GPS expirou. Tente novamente.";
+        showToast(message);
+        els.btnGps.disabled = false;
+        els.btnGps.textContent = "Usar meu GPS";
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
 
   els.btnCopyReport.addEventListener("click", () => {
     if (!lastInfo) return;
@@ -576,7 +664,7 @@ function boot() {
   setupChrome();
   setupEvents();
   renderHistory();
-  setStatus("Pronto para consultar qualquer IP público.");
+  setStatus("Digite o IP público que deseja consultar.");
 }
 
 boot();

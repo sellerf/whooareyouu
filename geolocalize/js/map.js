@@ -1,12 +1,12 @@
-/** Leaflet map helpers — grayscale tiles for P&B look */
+/** Leaflet map helpers — OpenStreetMap tiles; no API key required */
 
 let map = null;
 let marker = null;
 let circle = null;
 
-const TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const TILE_ATTR =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
 
 export function initMap(containerId = "map") {
   if (map) return map;
@@ -17,18 +17,13 @@ export function initMap(containerId = "map") {
   map = L.map(el, {
     zoomControl: true,
     attributionControl: true,
-    scrollWheelZoom: false,
+    scrollWheelZoom: true,
   }).setView([20, 0], 2);
 
   L.tileLayer(TILE_URL, {
     attribution: TILE_ATTR,
     maxZoom: 18,
-    subdomains: "abcd",
   }).addTo(map);
-
-  // Enable wheel zoom after focus/click (Tesla-clean UX)
-  el.addEventListener("click", () => map.scrollWheelZoom.enable());
-  el.addEventListener("mouseleave", () => map.scrollWheelZoom.disable());
 
   setTimeout(() => map.invalidateSize(), 100);
   return map;
@@ -49,6 +44,7 @@ export function updateMap(lat, lng, label = "") {
 
   const la = Number(lat);
   const lo = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(lo) || la < -90 || la > 90 || lo < -180 || lo > 180) return;
 
   if (marker) map.removeLayer(marker);
   if (circle) map.removeLayer(circle);
